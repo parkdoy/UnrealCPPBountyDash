@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
+#include "BountyDash.h"
 #include "GameFramework/Character.h"
 #include "BountyDashCharacter.generated.h"
 
@@ -27,39 +27,30 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 public:
-
-	//이동방향 배열
 	UPROPERTY(EditAnywhere, Category = Logic)
-		TArray<class ATargetPoint*> TargetArray;
+	TArray<class ATargetPoint*> TargetArray;
 
-	//케릭터 줄 바꿈 속도
 	UPROPERTY(EditAnywhere, Category = Logic)
-		float CharSpeed;
+	float CharSpeed;
 
-	//충돌 사운드를 위한 오디오 컴포넌트
 	UPROPERTY(EditAnywhere, Category = Sound)
-		UAudioComponent* HitObstacleSound;
+	UAudioComponent* HitObstacleSound;
 
-	//코인 획득 사운드를 위한 오디오 컴포넌트
 	UPROPERTY(EditAnywhere, Category = Sound)
-		UAudioComponent* dingsound;
+	UAudioComponent* DingSound;
 
 protected:
-	//플레이어와 카메라 간의 거리를 유지하기 위한 카메라 붐
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera)
-		class USpringArmComponent* CameraBoom;
+	class USpringArmComponent* CameraBoom;
 
-	//타켓 뷰로 사용할 카메라
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera)
-		class UCameraComponent* FollowCamera;
+	class UCameraComponent* FollowCamera;
 
-	//플레이어 점수
 	UPROPERTY(BlueprintReadOnly)
-		int32 Score;
+	int32 Score;
 
 private:
-
-	//케릭터 서있는 위치 데이터
+	// Location where character is at
 	short CurrentLocation;
 	FVector DesiredLocation;
 	bool bBeingPushed;
@@ -68,16 +59,16 @@ public:
 	void ScoreUp();
 
 protected:
-
-	//플레이어 좌우의 타깃 위치 이동을 조절
+	// movement of character -> left and right
 	void MoveRight();
 	void MoveLeft();
 
-	//콜리전 캡슐에 사용되는 오버랩 함수
+	// function for collision
 	UFUNCTION()
-		void MyOnComponentBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+	void MyOnComponentBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
 	UFUNCTION()
-		void MyOnComponentEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
-
-
+	void MyOnComponentEndOverlap(UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 };
