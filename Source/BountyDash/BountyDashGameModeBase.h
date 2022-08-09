@@ -28,6 +28,22 @@ public:
 	UFUNCTION()
 	int32 GetGameLevel();
 
+	void ReduceGameSpeed();
+
+	float GetRuntime();
+	
+	virtual void Tick(float DeltaSeconds) override;
+
+	UFUNCTION()
+		bool GetGameOver();
+
+	UFUNCTION()
+		void GameOver();
+
+	UFUNCTION()
+		void SetGamePaused(bool gamePaused);
+
+
 private:
 	UPROPERTY()
 	float GameSpeed;
@@ -41,4 +57,19 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float GameSpeedIncrease;
+
+	UPROPERTY()
+	float RunTime;
+	
+	UPROPERTY()
+		bool bGameOver;
+
+	UPROPERTY()
+		bool startGameOverCount;
+
+	UPROPERTY()
+		float timeTillGameOver;
+
+	UPROPERTY()
+		float gameOverTimer;
 };

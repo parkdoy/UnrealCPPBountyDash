@@ -10,6 +10,12 @@
 #include "EngineUtils.h"
 #include "Obstacle.h"
 #include "BountyDashGameModeBase.h"
+#include "Coin.h"
+#include "DestructibleComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Floor.h"
+#include "BountyDashParticle.h"
+
 
 // Sets default values
 ABountyDashCharacter::ABountyDashCharacter()
@@ -63,7 +69,12 @@ ABountyDashCharacter::ABountyDashCharacter()
 		// setting rotation of camera to look at character slightly downward
 		FollowCamera->AddRelativeRotation(FQuat(FRotator(-10.0f, 0.0f, 0.0f)));
 
+		//게임속성
 		CharSpeed = 10.0f;
+		SmashTime = 10.0f;
+		SmashTime = 10.0f;
+		MagnetTime = 10.0f;
+		MagnetReach = 1000.0f;
 
 		GetCapsuleComponent()->OnComponentBeginOverlap.AddDynamic(this, &ABountyDashCharacter::MyOnComponentBeginOverlap);
 		GetCapsuleComponent()->OnComponentEndOverlap.AddDynamic(this, &ABountyDashCharacter::MyOnComponentEndOverlap);
@@ -95,6 +106,12 @@ void ABountyDashCharacter::BeginPlay()
 	// Among Targetpoints, finding the middle one
 	CurrentLocation = (TargetArray.Num() / 2 + TargetArray.Num() % 2 - 1);
 
+	//킬포인트 위치 설정
+	for (TActorIterator<AFloor>TargetIter(GetWorld()); TargetIter; ++TargetIter)
+	{
+		KillPoint = TargetIter->GetKillPoint();
+
+	}
 }
 
 // Called every frame
@@ -102,6 +119,7 @@ void ABountyDashCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	//라인 사이를 부드럽게 이동
 	if (TargetArray.Num() > 0)
 	{
 		FVector targetLoc = TargetArray[CurrentLocation]->GetActorLocation();
@@ -114,11 +132,24 @@ void ABountyDashCharacter::Tick(float DeltaTime)
 		}
 	}
 
+	//장애물에 부딪혔을때 대상이 BeingPushed라면 케릭터를 뒤로 밀어낸다
 	if (bBeingPushed)
 	{
 		float MoveSpeed = GetCustomGameMode<ABountyDashGameModeBase>(GetWorld())->GetInvGameSpeed();
 		AddActorLocalOffset(FVector(MoveSpeed, 0.0f, 0.0f));
 
+	}
+
+	//코인을 자석처럼 끌어당긴다.
+	if (CanMagnet)
+	{
+		CoinMagmet();
+	}
+
+	//KillPoint에 다다르면 GameOver 처리
+	if (GetActorLocation().X < KillPoint)
+	{
+		GetCustomGameMode<ABountyDashGameModeBase>(GetWorld())->GameOver();
 	}
 }
 
@@ -132,13 +163,48 @@ void ABountyDashCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	InputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
 	InputComponent->BindAction("GoRight", IE_Pressed, this, &ABountyDashCharacter::MoveRight);
 	InputComponent->BindAction("GoLeft", IE_Pressed, this, &ABountyDashCharacter::MoveLeft);
-	
+
+	//bExecuteWhenPaused - 게임이 일시 중지된 상태라도 인풋 액션을 수행할 수 있게 설정
+	InputComponent->BindAction("Reset", IE_Pressed, this, &ABountyDashCharacter::Reset).bExecuteWhenPaused = true;
 }
 
 void ABountyDashCharacter::ScoreUp()
 {
 	Score++;
 	GetCustomGameMode<ABountyDashGameModeBase>(GetWorld())->CharScoreUp(Score);
+}
+
+void ABountyDashCharacter::PowerUp(EPowerUp Type)
+{
+	switch (Type)
+	{
+	case EPowerUp::SPEED: 
+	{
+		GetCustomGameMode<ABountyDashGameModeBase>(GetWorld())->ReduceGameSpeed();
+		break; 
+	}
+	case EPowerUp::SMASH:
+	{
+		CanSmash = true;
+		FTimerHandle newTimer;
+		GetWorld()->GetTimerManager().SetTimer(newTimer, this, &ABountyDashCharacter::StopSmash, SmashTime, false);
+		break;
+	}
+	case EPowerUp::MAGNET:
+	{
+		CanMagnet = true;
+		FTimerHandle newTimer;
+		GetWorld()->GetTimerManager().SetTimer(newTimer, this, &ABountyDashCharacter::StopMagnet, MagnetTime, false);
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+int ABountyDashCharacter::GetScore()
+{
+	return Score;
 }
 
 void ABountyDashCharacter::MoveRight()
@@ -176,6 +242,7 @@ void ABountyDashCharacter::MyOnComponentBeginOverlap(UPrimitiveComponent* Overla
 {
 	if (OtherActor->GetClass()->IsChildOf(AObstacle::StaticClass()))
 	{
+		// 오브젝트를 부시거나 캐릭터 밀어내기 bBeingPushed 설정
 		FVector VecBetween = OtherActor->GetActorLocation() - GetActorLocation();
 		float AngleBetween = FMath::Acos(FVector::DotProduct(VecBetween.GetSafeNormal(), GetActorForwardVector().GetSafeNormal()));
 
@@ -183,7 +250,19 @@ void ABountyDashCharacter::MyOnComponentBeginOverlap(UPrimitiveComponent* Overla
 
 		if (AngleBetween < 60.0f)
 		{
-			bBeingPushed = true;
+			AObstacle* pObs = Cast<AObstacle>(OtherActor);
+			if(pObs && CanSmash)
+			{
+				pObs->GetDestructable()->ApplyRadiusDamage(10000, GetActorLocation(), 10000, 10000, true);
+
+				// 파괴 이펙트 출력
+				ABountyDashParticle* particleSys = GetWorld()->SpawnActor<ABountyDashParticle>(ABountyDashParticle::StaticClass(), GetTransform());
+				particleSys->SetKillPoint(KillPoint);
+			}
+			else
+			{
+				bBeingPushed = true;
+			}
 		}
 	}
 }
@@ -197,3 +276,31 @@ void ABountyDashCharacter::MyOnComponentEndOverlap(UPrimitiveComponent* Overlapp
 	}
 }
 
+void ABountyDashCharacter::StopSmash()
+{
+	CanMagnet = false;
+}
+
+void ABountyDashCharacter::StopMagnet()
+{
+	CanSmash = false;
+}
+
+void ABountyDashCharacter::CoinMagmet()
+{
+	for (TActorIterator<ACoin>coinIter(GetWorld()); coinIter; ++coinIter)
+	{
+		FVector between = GetActorLocation() - coinIter->GetActorLocation();
+		if (FMath::Abs(between.Size()) < MagnetReach)
+		{
+			FVector CoinPos = FMath::Lerp((*coinIter)->GetActorLocation(), GetActorLocation(), 0.2);
+			(*coinIter)->SetActorLocation(CoinPos);
+			(*coinIter)->BeginPulled=true;
+		}
+	}
+}
+
+void ABountyDashCharacter::Reset()
+{
+	UGameplayStatics::OpenLevel(GetWorld(), TEXT("BountyDashMap"));
+}
